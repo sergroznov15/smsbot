@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
 from typing import Iterable, List, Set
 
+from aiohttp import web
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
@@ -267,9 +269,55 @@ def build_application() -> Application:
     return app
 
 
+async def keep_alive_task(application: Application) -> None:
+    """Периодическая задача для поддержания активности бота."""
+    while True:
+        try:
+            await asyncio.sleep(300)  # Каждые 5 минут
+            bot_info = await application.bot.get_me()
+            logger.debug("Keep-alive: бот активен (@%s)", bot_info.username)
+        except Exception as e:
+            logger.warning("Ошибка в keep-alive задаче: %s", e)
+            await asyncio.sleep(60)  # При ошибке ждём минуту
+
+
+async def health_check_handler(request: web.Request) -> web.Response:
+    """HTTP endpoint для health check."""
+    return web.Response(text="OK")
+
+
+async def start_web_server(port: int) -> None:
+    """Запускает простой HTTP сервер для health check."""
+    app = web.Application()
+    app.router.add_get("/", health_check_handler)
+    app.router.add_get("/health", health_check_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info("HTTP сервер запущен на порту %d для health check", port)
+
+
 def main() -> None:
     application = build_application()
     logger.info("Запускаю бота...")
+    
+    # Запускаем keep-alive задачу
+    loop = asyncio.get_event_loop()
+    loop.create_task(keep_alive_task(application))
+    
+    # Запускаем HTTP сервер для health check (если указан порт)
+    web_port = os.getenv("PORT")
+    if web_port:
+        try:
+            port = int(web_port)
+            loop.create_task(start_web_server(port))
+            logger.info("Keep-alive активен: HTTP на порту %d, периодические проверки каждые 5 минут", port)
+        except ValueError:
+            logger.warning("Неверный формат PORT, HTTP сервер не запущен")
+    else:
+        logger.info("Keep-alive активен: периодические проверки каждые 5 минут (HTTP сервер не запущен)")
+    
     application.run_polling(close_loop=False)
 
 
