@@ -5,5 +5,12 @@
     "chat_type": "group",
     "enabled": true,
     "updated_at": "2025-11-24T12:43:55.926160+00:00"
+  },
+  {
+    "chat_id": -1003324095547,
+    "title": "Маркет",
+    "chat_type": "supergroup",
+    "enabled": true,
+    "updated_at": "2025-11-24T13:34:57.969164+00:00"
   }
 ]
